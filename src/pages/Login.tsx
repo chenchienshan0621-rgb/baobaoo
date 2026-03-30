@@ -54,7 +54,7 @@ export function Login() {
             <Baby className="w-10 h-10 text-[#5c8a5c]" />
           </div>
           <h1 className="text-3xl font-bold text-white tracking-wider" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
-            森之寶貝日誌
+            香香媽媽寶貝日誌
           </h1>
           <p className="text-white/90 mt-3 font-medium tracking-wide">
             記錄每一個如魔法般的成長瞬間

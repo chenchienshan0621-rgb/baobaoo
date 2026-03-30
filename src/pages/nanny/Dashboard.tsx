@@ -680,7 +680,7 @@ export function NannyDashboard() {
             </div>
           ))}
           <div className="mt-12 pt-6 text-center text-lg" style={{ color: '#a8a29e', borderTop: '2px solid #ffe4e6' }}>
-            來自 森之寶貝日誌
+            來自 香香媽媽寶貝日誌
           </div>
         </div>
       </div>
