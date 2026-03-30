@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isNanny() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'nanny';
+    }
+    function isParent() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent';
+    }
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    function isValidUser() {
+      return hasRequiredFields(['uid', 'role', 'name', 'email']) &&
+             request.resource.data.role in ['nanny', 'parent'] &&
+             request.resource.data.uid == request.auth.uid;
+    }
+    function isValidToddler() {
+      return hasRequiredFields(['name', 'characteristics', 'nannyId', 'createdAt']) &&
+             request.resource.data.nannyId == request.auth.uid &&
+             request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() < 100 &&
+             request.resource.data.characteristics is string && request.resource.data.characteristics.size() < 500 &&
+             (!('parentEmail' in request.resource.data) || request.resource.data.parentEmail is string) &&
+             (!('parentEmails' in request.resource.data) || (request.resource.data.parentEmails is list && request.resource.data.parentEmails.size() <= 3)) &&
+             (!('photoBase64' in request.resource.data) || (request.resource.data.photoBase64 is string && request.resource.data.photoBase64.size() < 1048487));
+    }
+    function isValidLog() {
+      return hasRequiredFields(['photoBase64', 'description', 'toddlerIds', 'parentEmails', 'nannyId', 'createdAt']) &&
+             request.resource.data.nannyId == request.auth.uid &&
+             request.resource.data.photoBase64 is string && request.resource.data.photoBase64.size() < 1048487 && // ~1MB limit
+             request.resource.data.description is string && request.resource.data.description.size() < 2000 &&
+             request.resource.data.toddlerIds is list && request.resource.data.toddlerIds.size() <= 20 &&
+             request.resource.data.parentEmails is list && request.resource.data.parentEmails.size() <= 20 &&
+             (!('photoTime' in request.resource.data) || request.resource.data.photoTime is string) &&
+             (!('photoLocation' in request.resource.data) || (request.resource.data.photoLocation is map && request.resource.data.photoLocation.keys().hasAll(['lat', 'lng']) && (!('address' in request.resource.data.photoLocation) || request.resource.data.photoLocation.address is string)));
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser();
+      allow update: if isOwner(userId) && isValidUser() && request.resource.data.role == resource.data.role;
+    }
+
+    // Toddlers Collection
+    match /toddlers/{toddlerId} {
+      allow read: if isAuthenticated() && (
+        (isNanny() && resource.data.nannyId == request.auth.uid) ||
+        (isParent() && (
+          ('parentEmail' in resource.data && resource.data.parentEmail == request.auth.token.email) ||
+          ('parentEmails' in resource.data && request.auth.token.email in resource.data.parentEmails)
+        ))
+      );
+      allow create: if isNanny() && isValidToddler();
+      allow update: if isNanny() && resource.data.nannyId == request.auth.uid && isValidToddler();
+      allow delete: if isNanny() && resource.data.nannyId == request.auth.uid;
+    }
+
+    // Logs Collection
+    match /logs/{logId} {
+      allow read: if isAuthenticated() && (
+        (isNanny() && resource.data.nannyId == request.auth.uid) ||
+        (isParent() && request.auth.token.email in resource.data.parentEmails)
+      );
+      allow create: if isNanny() && isValidLog();
+      allow update: if isNanny() && resource.data.nannyId == request.auth.uid && isValidLog();
+      allow delete: if isNanny() && resource.data.nannyId == request.auth.uid;
+    }
+  }
+}

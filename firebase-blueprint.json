@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the system (Nanny or Parent)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "role": { "type": "string", "enum": ["nanny", "parent"] },
+        "name": { "type": "string" },
+        "email": { "type": "string" }
+      },
+      "required": ["uid", "role", "name", "email"]
+    },
+    "Toddler": {
+      "title": "Toddler",
+      "description": "A toddler managed by a nanny",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "characteristics": { "type": "string" },
+        "parentEmail": { "type": "string" },
+        "parentEmails": { "type": "array", "items": { "type": "string" } },
+        "nannyId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "photoBase64": { "type": "string" }
+      },
+      "required": ["name", "characteristics", "nannyId", "createdAt"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "A daily log with photo and description",
+      "type": "object",
+      "properties": {
+        "photoBase64": { "type": "string" },
+        "description": { "type": "string" },
+        "toddlerIds": { "type": "array", "items": { "type": "string" } },
+        "parentEmails": { "type": "array", "items": { "type": "string" } },
+        "nannyId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "photoTime": { "type": "string", "format": "date-time" },
+        "photoLocation": { 
+          "type": "object", 
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" },
+            "address": { "type": "string" }
+          }
+        }
+      },
+      "required": ["photoBase64", "description", "toddlerIds", "parentEmails", "nannyId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "toddlers/{toddlerId}": {
+      "schema": "Toddler",
+      "description": "Toddler profiles"
+    },
+    "logs/{logId}": {
+      "schema": "Log",
+      "description": "Daily logs"
+    }
+  }
+}

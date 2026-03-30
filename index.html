@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Google AI Studio App</title>
+    <script>
+      // Catch runtime JS errors
+      window.addEventListener('error', function(event) {
+        if (event.message) {
+          document.body.innerHTML += '<div style="color:red;padding:20px;font-family:sans-serif;position:relative;z-index:9999;background:white;"><h3>Global Error:</h3><pre>' + event.error?.message + '</pre><pre>' + event.error?.stack + '</pre></div>';
+        }
+      });
+      // Catch unhandled promises
+      window.addEventListener('unhandledrejection', function(event) {
+        document.body.innerHTML += '<div style="color:red;padding:20px;font-family:sans-serif;position:relative;z-index:9999;background:white;"><h3>Unhandled Promise Rejection:</h3><pre>' + event.reason + '</pre></div>';
+      });
+      // Catch resource load errors (like 404 for JS/CSS files)
+      window.addEventListener('error', function(e) {
+        if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+          document.body.innerHTML += '<div style="color:red;padding:20px;font-family:sans-serif;position:relative;z-index:9999;background:white;"><h3>資源載入失敗 (Resource Load Error):</h3><p>無法載入檔案: ' + (e.target.src || e.target.href) + '</p><p>這通常是因為 GitHub Pages 的路徑設定錯誤，或是部署還沒完成。請確認您的 Repository 名稱是否完全等於 abaobao（大小寫需一致）。</p></div>';
+        }
+      }, true);
+    </script>
+  </head>
+  <body>
+    <div id="debug-loading" style="padding: 40px; text-align: center; font-family: sans-serif; color: #666;">
+      <h2 style="color: #333;">網頁載入中... (Loading...)</h2>
+      <p>正在嘗試啟動應用程式。</p>
+      <p>如果您一直停留在這個畫面超過 5 秒，表示發生了嚴重的錯誤，或是您的瀏覽器快取了舊的網頁。</p>
+      <p>請嘗試按下 <b>Ctrl + F5</b> (Windows) 或 <b>Cmd + Shift + R</b> (Mac) 強制重新整理。</p>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Hide loading text if React successfully mounts
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          const root = document.getElementById('root');
+          if (root && root.innerHTML.trim() !== '') {
+            const loader = document.getElementById('debug-loading');
+            if (loader) loader.style.display = 'none';
+          }
+        }, 1000);
+      });
+    </script>
+  </body>
+</html>
+
