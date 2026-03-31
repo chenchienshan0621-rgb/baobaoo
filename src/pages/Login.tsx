@@ -17,6 +17,7 @@ export function Login() {
   }
 
   if (user && profile?.role) {
+    if (profile.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
     return <Navigate to={profile.role === 'nanny' ? '/nanny/dashboard' : '/parent/dashboard'} replace />;
   }
 
@@ -101,6 +102,12 @@ export function Login() {
                 className="w-full bg-white border-2 border-[#8ba888]/30 text-[#4a6b4a] px-6 py-4 rounded-2xl hover:bg-[#f0f5f0] hover:border-[#8ba888] transition-all duration-300 shadow-sm hover:shadow-md font-bold text-lg transform hover:-translate-y-1"
               >
                 我是家長
+              </button>
+              <button
+                onClick={() => setRole('admin')}
+                className="w-full bg-stone-100 border-2 border-stone-200 text-stone-600 px-6 py-4 rounded-2xl hover:bg-stone-200 hover:border-stone-300 transition-all duration-300 shadow-sm hover:shadow-md font-bold text-lg transform hover:-translate-y-1"
+              >
+                我是網站管理者
               </button>
             </div>
           )}

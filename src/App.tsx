@@ -7,6 +7,7 @@ import { NannyDashboard } from './pages/nanny/Dashboard';
 import { NannyUpload } from './pages/nanny/Upload';
 import { NannyToddlers } from './pages/nanny/Toddlers';
 import { ParentDashboard } from './pages/parent/Dashboard';
+import { AdminDashboard } from './pages/admin/Dashboard';
 
 export default function App() {
   return (
@@ -23,6 +24,9 @@ export default function App() {
             </Route>
             <Route path="parent">
               <Route path="dashboard" element={<ParentDashboard />} />
+            </Route>
+            <Route path="admin">
+              <Route path="dashboard" element={<AdminDashboard />} />
             </Route>
           </Route>
         </Routes>

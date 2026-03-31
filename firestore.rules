@@ -8,6 +8,11 @@ service cloud.firestore {
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "chen.chienshan0621@gmail.com" && request.auth.token.email_verified == true)); // Default admin
+    }
     function isNanny() {
       return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'nanny';
     }
@@ -19,7 +24,7 @@ service cloud.firestore {
     }
     function isValidUser() {
       return hasRequiredFields(['uid', 'role', 'name', 'email']) &&
-             request.resource.data.role in ['nanny', 'parent'] &&
+             request.resource.data.role in ['nanny', 'parent', 'admin'] &&
              request.resource.data.uid == request.auth.uid;
     }
     function isValidToddler() {
@@ -38,6 +43,7 @@ service cloud.firestore {
              request.resource.data.description is string && request.resource.data.description.size() < 2000 &&
              request.resource.data.toddlerIds is list && request.resource.data.toddlerIds.size() <= 20 &&
              request.resource.data.parentEmails is list && request.resource.data.parentEmails.size() <= 20 &&
+             (!('dailyRecords' in request.resource.data) || request.resource.data.dailyRecords is map) &&
              (!('photoTime' in request.resource.data) || request.resource.data.photoTime is string) &&
              (!('photoLocation' in request.resource.data) || (request.resource.data.photoLocation is map && request.resource.data.photoLocation.keys().hasAll(['lat', 'lng']) && (!('address' in request.resource.data.photoLocation) || request.resource.data.photoLocation.address is string)));
     }
@@ -45,13 +51,17 @@ service cloud.firestore {
     // Users Collection
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId) && isValidUser();
-      allow update: if isOwner(userId) && isValidUser() && request.resource.data.role == resource.data.role;
+      allow create: if isOwner(userId) && isValidUser() && (request.resource.data.role != 'admin' || isAdmin());
+      allow update: if isAuthenticated() && (
+        (isOwner(userId) && isValidUser() && request.resource.data.role == resource.data.role) ||
+        (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && request.resource.data.role in ['nanny', 'parent', 'admin'])
+      );
     }
 
     // Toddlers Collection
     match /toddlers/{toddlerId} {
       allow read: if isAuthenticated() && (
+        isAdmin() ||
         (isNanny() && resource.data.nannyId == request.auth.uid) ||
         (isParent() && (
           ('parentEmail' in resource.data && resource.data.parentEmail == request.auth.token.email) ||
@@ -66,6 +76,7 @@ service cloud.firestore {
     // Logs Collection
     match /logs/{logId} {
       allow read: if isAuthenticated() && (
+        isAdmin() ||
         (isNanny() && resource.data.nannyId == request.auth.uid) ||
         (isParent() && request.auth.token.email in resource.data.parentEmails)
       );

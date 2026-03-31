@@ -6,11 +6,20 @@ import { format } from 'date-fns';
 import { handleFirestoreError, OperationType } from '../../lib/utils';
 import { Image as ImageIcon, Download, Heart, MapPin, Clock, Filter, Calendar, Baby } from 'lucide-react';
 
+interface DailyRecord {
+  activityContent: string;
+  meals: string;
+  snacks: string;
+  sleepRecord: string;
+  toileting: string;
+}
+
 interface Log {
   id: string;
   photoBase64: string;
   description: string;
   toddlerIds: string[];
+  dailyRecords?: Record<string, DailyRecord>;
   parentEmails: string[];
   nannyId: string;
   createdAt: string;
@@ -227,6 +236,31 @@ export function ParentDashboard() {
                   <p className="text-stone-700 text-base leading-relaxed mb-6">
                     {log.description}
                   </p>
+
+                  {log.dailyRecords && Object.keys(log.dailyRecords).length > 0 && (
+                    <div className="mb-6 space-y-3 border-t border-stone-100 pt-4">
+                      <h4 className="text-sm font-bold text-stone-700">寶貝生活紀錄</h4>
+                      {Object.entries(log.dailyRecords).map(([toddlerId, record]) => {
+                        const hasContent = Object.values(record).some(val => val.trim() !== '');
+                        if (!hasContent) return null;
+                        
+                        const toddlerName = toddlers.find(t => t.id === toddlerId)?.name || '寶貝';
+                        
+                        return (
+                          <div key={toddlerId} className="bg-stone-50 p-3 rounded-xl border border-stone-200 text-sm">
+                            <div className="font-medium text-rose-600 mb-2">{toddlerName}</div>
+                            <div className="grid grid-cols-1 gap-1.5 text-stone-600">
+                              {record.activityContent && <div><span className="font-medium text-stone-700">活動：</span>{record.activityContent}</div>}
+                              {record.meals && <div><span className="font-medium text-stone-700">用餐：</span>{record.meals}</div>}
+                              {record.snacks && <div><span className="font-medium text-stone-700">點心：</span>{record.snacks}</div>}
+                              {record.sleepRecord && <div><span className="font-medium text-stone-700">睡眠：</span>{record.sleepRecord}</div>}
+                              {record.toileting && <div><span className="font-medium text-stone-700">如廁：</span>{record.toileting}</div>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
                 
                 {/* 顯眼的下載按鈕 */}

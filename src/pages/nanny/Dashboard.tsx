@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { format } from 'date-fns';
@@ -8,11 +8,20 @@ import { Image as ImageIcon, Edit2, Check, X, Loader2, BookOpen, MapPin, Clock, 
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
+interface DailyRecord {
+  activityContent: string;
+  meals: string;
+  snacks: string;
+  sleepRecord: string;
+  toileting: string;
+}
+
 interface Log {
   id: string;
   photoBase64: string;
   description: string;
   toddlerIds: string[];
+  dailyRecords?: Record<string, DailyRecord>;
   parentEmails: string[];
   nannyId: string;
   createdAt: string;
@@ -23,6 +32,7 @@ interface Log {
 export function NannyDashboard() {
   const { user } = useAuth();
   const [logs, setLogs] = useState<Log[]>([]);
+  const [toddlers, setToddlers] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   
   // 編輯狀態
@@ -39,6 +49,20 @@ export function NannyDashboard() {
 
   useEffect(() => {
     if (!user) return;
+
+    const fetchToddlers = async () => {
+      try {
+        const snapshot = await getDocs(query(collection(db, 'toddlers'), where('nannyId', '==', user.uid)));
+        const toddlerMap: Record<string, string> = {};
+        snapshot.docs.forEach(doc => {
+          toddlerMap[doc.id] = doc.data().name;
+        });
+        setToddlers(toddlerMap);
+      } catch (error) {
+        console.error('Failed to fetch toddlers', error);
+      }
+    };
+    fetchToddlers();
 
     const q = query(
       collection(db, 'logs'),
@@ -536,10 +560,33 @@ export function NannyDashboard() {
                 <div className="mt-6 flex flex-wrap gap-2">
                   {log.toddlerIds.map(id => (
                     <span key={id} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-stone-100 text-stone-600 border border-stone-200">
-                      已標記寶貝
+                      {toddlers[id] || '已標記寶貝'}
                     </span>
                   ))}
                 </div>
+
+                {log.dailyRecords && Object.keys(log.dailyRecords).length > 0 && (
+                  <div className="mt-4 space-y-3 border-t border-stone-100 pt-4">
+                    <h4 className="text-sm font-bold text-stone-700">寶貝生活紀錄</h4>
+                    {Object.entries(log.dailyRecords).map(([toddlerId, record]) => {
+                      const hasContent = Object.values(record).some(val => val.trim() !== '');
+                      if (!hasContent) return null;
+                      
+                      return (
+                        <div key={toddlerId} className="bg-stone-50 p-3 rounded-xl border border-stone-200 text-sm">
+                          <div className="font-medium text-rose-600 mb-2">{toddlers[toddlerId] || '寶貝'}</div>
+                          <div className="grid grid-cols-1 gap-1.5 text-stone-600">
+                            {record.activityContent && <div><span className="font-medium text-stone-700">活動：</span>{record.activityContent}</div>}
+                            {record.meals && <div><span className="font-medium text-stone-700">用餐：</span>{record.meals}</div>}
+                            {record.snacks && <div><span className="font-medium text-stone-700">點心：</span>{record.snacks}</div>}
+                            {record.sleepRecord && <div><span className="font-medium text-stone-700">睡眠：</span>{record.sleepRecord}</div>}
+                            {record.toileting && <div><span className="font-medium text-stone-700">如廁：</span>{record.toileting}</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )})}

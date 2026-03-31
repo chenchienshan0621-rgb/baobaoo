@@ -6,7 +6,7 @@
       "type": "object",
       "properties": {
         "uid": { "type": "string" },
-        "role": { "type": "string", "enum": ["nanny", "parent"] },
+        "role": { "type": "string", "enum": ["nanny", "parent", "admin"] },
         "name": { "type": "string" },
         "email": { "type": "string" }
       },
@@ -36,6 +36,19 @@
         "description": { "type": "string" },
         "toddlerIds": { "type": "array", "items": { "type": "string" } },
         "parentEmails": { "type": "array", "items": { "type": "string" } },
+        "dailyRecords": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "activityContent": { "type": "string" },
+              "meals": { "type": "string" },
+              "snacks": { "type": "string" },
+              "sleepRecord": { "type": "string" },
+              "toileting": { "type": "string" }
+            }
+          }
+        },
         "nannyId": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "photoTime": { "type": "string", "format": "date-time" },

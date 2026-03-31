@@ -16,6 +16,14 @@ interface Toddler {
   parentEmails?: string[];
 }
 
+interface DailyRecord {
+  activityContent: string;
+  meals: string;
+  snacks: string;
+  sleepRecord: string;
+  toileting: string;
+}
+
 interface UploadItem {
   id: string;
   file: File;
@@ -25,6 +33,7 @@ interface UploadItem {
   photoLocation: {lat: number, lng: number, address?: string} | null;
   description: string;
   selectedToddlerIds: string[];
+  dailyRecords: Record<string, DailyRecord>;
   hasAnalyzed: boolean;
   isAnalyzing: boolean;
   errorMsg: string | null;
@@ -144,6 +153,7 @@ export function NannyUpload() {
           photoLocation,
           description: '',
           selectedToddlerIds: [],
+          dailyRecords: {},
           hasAnalyzed: false,
           isAnalyzing: false,
           errorMsg: null
@@ -250,10 +260,26 @@ export function NannyUpload() {
               ? result.identifiedToddlerIds.filter((id: string) => toddlers.some(t => t.id === id))
               : p.selectedToddlerIds;
               
+            const newRecords: Record<string, DailyRecord> = {};
+            validIds.forEach((id: string) => {
+              if (p.dailyRecords[id]) {
+                newRecords[id] = p.dailyRecords[id];
+              } else {
+                newRecords[id] = {
+                  activityContent: '',
+                  meals: '',
+                  snacks: '',
+                  sleepRecord: '',
+                  toileting: ''
+                };
+              }
+            });
+              
             return {
               ...p,
               description: result.description || p.description,
               selectedToddlerIds: validIds,
+              dailyRecords: newRecords,
               hasAnalyzed: true,
               isAnalyzing: false
             };
@@ -276,10 +302,43 @@ export function NannyUpload() {
   const toggleToddler = (itemId: string, toddlerId: string) => {
     setItems(prev => prev.map(item => {
       if (item.id === itemId) {
-        const newIds = item.selectedToddlerIds.includes(toddlerId)
+        const isSelected = item.selectedToddlerIds.includes(toddlerId);
+        const newIds = isSelected
           ? item.selectedToddlerIds.filter(id => id !== toddlerId)
           : [...item.selectedToddlerIds, toddlerId];
-        return { ...item, selectedToddlerIds: newIds };
+        
+        const newRecords = { ...item.dailyRecords };
+        if (isSelected) {
+          delete newRecords[toddlerId];
+        } else {
+          newRecords[toddlerId] = {
+            activityContent: '',
+            meals: '',
+            snacks: '',
+            sleepRecord: '',
+            toileting: ''
+          };
+        }
+        
+        return { ...item, selectedToddlerIds: newIds, dailyRecords: newRecords };
+      }
+      return item;
+    }));
+  };
+
+  const updateDailyRecord = (itemId: string, toddlerId: string, field: keyof DailyRecord, value: string) => {
+    setItems(prev => prev.map(item => {
+      if (item.id === itemId) {
+        return {
+          ...item,
+          dailyRecords: {
+            ...item.dailyRecords,
+            [toddlerId]: {
+              ...item.dailyRecords[toddlerId],
+              [field]: value
+            }
+          }
+        };
       }
       return item;
     }));
@@ -313,6 +372,7 @@ export function NannyUpload() {
           photoBase64: item.base64Image,
           description: item.description.trim(),
           toddlerIds: item.selectedToddlerIds,
+          dailyRecords: item.dailyRecords,
           parentEmails: uniqueParentEmails,
           nannyId: user.uid,
           createdAt: new Date().toISOString()
@@ -479,26 +539,97 @@ export function NannyUpload() {
                   {toddlers.length === 0 ? (
                     <p className="text-xs text-rose-500">請先至「幼兒管理」新增幼兒資料</p>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {toddlers.map(toddler => {
-                        const isSelected = item.selectedToddlerIds.includes(toddler.id);
-                        return (
-                          <button
-                            key={toddler.id}
-                            onClick={() => toggleToddler(item.id, toddler.id)}
-                            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border transition-all text-sm ${
-                              isSelected 
-                                ? 'bg-rose-100 border-rose-300 text-rose-700 font-medium' 
-                                : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
-                            }`}
-                          >
-                            <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${isSelected ? 'bg-rose-400 border-rose-400 text-white' : 'border-stone-300'}`}>
-                              {isSelected && <Check className="w-2.5 h-2.5" />}
-                            </div>
-                            <span>{toddler.name}</span>
-                          </button>
-                        );
-                      })}
+                    <div className="flex flex-col space-y-4">
+                      <div className="flex flex-wrap gap-2">
+                        {toddlers.map(toddler => {
+                          const isSelected = item.selectedToddlerIds.includes(toddler.id);
+                          return (
+                            <button
+                              key={toddler.id}
+                              onClick={() => toggleToddler(item.id, toddler.id)}
+                              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border transition-all text-sm ${
+                                isSelected 
+                                  ? 'bg-rose-100 border-rose-300 text-rose-700 font-medium' 
+                                  : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
+                              }`}
+                            >
+                              <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${isSelected ? 'bg-rose-400 border-rose-400 text-white' : 'border-stone-300'}`}>
+                                {isSelected && <Check className="w-2.5 h-2.5" />}
+                              </div>
+                              <span>{toddler.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      
+                      {item.selectedToddlerIds.length > 0 && (
+                        <div className="space-y-4 mt-4 border-t border-stone-100 pt-4">
+                          <h4 className="text-sm font-bold text-stone-700">寶貝生活紀錄</h4>
+                          {item.selectedToddlerIds.map(toddlerId => {
+                            const toddler = toddlers.find(t => t.id === toddlerId);
+                            const record = item.dailyRecords[toddlerId];
+                            if (!toddler || !record) return null;
+                            
+                            return (
+                              <div key={toddlerId} className="bg-stone-50 p-4 rounded-xl border border-stone-200 space-y-3">
+                                <div className="font-medium text-rose-600 border-b border-rose-100 pb-2 mb-3">{toddler.name} 的紀錄</div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="text-xs font-bold text-stone-600 mb-1 block">活動內容</label>
+                                    <input 
+                                      type="text" 
+                                      value={record.activityContent}
+                                      onChange={(e) => updateDailyRecord(item.id, toddlerId, 'activityContent', e.target.value)}
+                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none"
+                                      placeholder="例如：畫畫、聽故事"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-bold text-stone-600 mb-1 block">用餐</label>
+                                    <input 
+                                      type="text" 
+                                      value={record.meals}
+                                      onChange={(e) => updateDailyRecord(item.id, toddlerId, 'meals', e.target.value)}
+                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none"
+                                      placeholder="例如：吃了一碗飯、蔬菜"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-bold text-stone-600 mb-1 block">點心</label>
+                                    <input 
+                                      type="text" 
+                                      value={record.snacks}
+                                      onChange={(e) => updateDailyRecord(item.id, toddlerId, 'snacks', e.target.value)}
+                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none"
+                                      placeholder="例如：蘋果半顆、牛奶"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-bold text-stone-600 mb-1 block">睡眠記錄</label>
+                                    <input 
+                                      type="text" 
+                                      value={record.sleepRecord}
+                                      onChange={(e) => updateDailyRecord(item.id, toddlerId, 'sleepRecord', e.target.value)}
+                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none"
+                                      placeholder="例如：午睡 13:00 - 15:00"
+                                    />
+                                  </div>
+                                  <div className="sm:col-span-2">
+                                    <label className="text-xs font-bold text-stone-600 mb-1 block">如廁</label>
+                                    <input 
+                                      type="text" 
+                                      value={record.toileting}
+                                      onChange={(e) => updateDailyRecord(item.id, toddlerId, 'toileting', e.target.value)}
+                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none"
+                                      placeholder="例如：大便1次(正常)、小便3次"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

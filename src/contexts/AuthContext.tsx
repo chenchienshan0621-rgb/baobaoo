@@ -4,7 +4,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { handleFirestoreError, OperationType } from '../lib/utils';
 
-export type Role = 'nanny' | 'parent' | null;
+export type Role = 'nanny' | 'parent' | 'admin' | null;
 
 export interface UserProfile {
   uid: string;
@@ -19,7 +19,7 @@ interface AuthContextType {
   loading: boolean;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
-  setRole: (role: 'nanny' | 'parent') => Promise<void>;
+  setRole: (role: 'nanny' | 'parent' | 'admin') => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await firebaseSignOut(auth);
   };
 
-  const setRole = async (role: 'nanny' | 'parent') => {
+  const setRole = async (role: 'nanny' | 'parent' | 'admin') => {
     if (!user) return;
     const newProfile: UserProfile = {
       uid: user.uid,
@@ -71,8 +71,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: user.email || '',
     };
     try {
-      await setDoc(doc(db, 'users', user.uid), newProfile);
-      setProfile(newProfile);
+      if (profile) {
+        await setDoc(doc(db, 'users', user.uid), { role }, { merge: true });
+        setProfile({ ...profile, role });
+      } else {
+        await setDoc(doc(db, 'users', user.uid), newProfile);
+        setProfile(newProfile);
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `users/${user.uid}`);
     }
