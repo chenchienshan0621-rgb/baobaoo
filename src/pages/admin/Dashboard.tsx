@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth, UserProfile, Role } from '../../contexts/AuthContext';
@@ -10,7 +11,8 @@ interface ExtendedUserProfile extends UserProfile {
 }
 
 export function AdminDashboard() {
-  const { profile } = useAuth();
+  const navigate = useNavigate();
+  const { profile, setRole } = useAuth();
   const [users, setUsers] = useState<ExtendedUserProfile[]>([]);
   const [toddlers, setToddlers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,7 +100,7 @@ export function AdminDashboard() {
       
       if (editingUser.uid === profile?.uid) {
         setTimeout(() => {
-          window.location.href = '/';
+          navigate('/');
         }, 1500);
       } else {
         setTimeout(() => {
@@ -200,7 +202,14 @@ export function AdminDashboard() {
         </div>
         <div className="flex items-center space-x-3">
           <button
-            onClick={() => window.location.href = '/'}
+            onClick={async () => {
+              if (profile?.email === 'chen.chienshan0621@gmail.com' && setRole) {
+                await setRole('nanny');
+                navigate('/nanny/dashboard');
+              } else {
+                navigate('/');
+              }
+            }}
             className="flex items-center space-x-2 px-4 py-2 bg-stone-100 text-stone-600 rounded-xl hover:bg-stone-200 transition-colors shadow-sm"
           >
             <Home className="w-5 h-5" />
