@@ -51,11 +51,17 @@ service cloud.firestore {
     // Users Collection
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId) && isValidUser() && (request.resource.data.role != 'admin' || isAdmin());
+      allow create: if isOwner(userId) && isValidUser() && (request.resource.data.role != 'admin' || isAdmin() || (exists(/databases/$(database)/documents/pre_registered_users/$(request.auth.token.email)) && get(/databases/$(database)/documents/pre_registered_users/$(request.auth.token.email)).data.role == 'admin'));
       allow update: if isAuthenticated() && (
         (isOwner(userId) && isValidUser() && request.resource.data.role == resource.data.role) ||
-        (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && request.resource.data.role in ['nanny', 'parent', 'admin'])
+        (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'linkedToddlerIds']) && request.resource.data.role in ['nanny', 'parent', 'admin'])
       );
+    }
+
+    // Pre-registered Users Collection
+    match /pre_registered_users/{email} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || (isAuthenticated() && request.auth.token.email == email);
     }
 
     // Toddlers Collection
@@ -65,7 +71,9 @@ service cloud.firestore {
         (isNanny() && resource.data.nannyId == request.auth.uid) ||
         (isParent() && (
           ('parentEmail' in resource.data && resource.data.parentEmail == request.auth.token.email) ||
-          ('parentEmails' in resource.data && request.auth.token.email in resource.data.parentEmails)
+          ('parentEmails' in resource.data && request.auth.token.email in resource.data.parentEmails) ||
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedToddlerIds != null &&
+           toddlerId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedToddlerIds)
         ))
       );
       allow create: if isNanny() && isValidToddler();
@@ -78,7 +86,11 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (
         isAdmin() ||
         (isNanny() && resource.data.nannyId == request.auth.uid) ||
-        (isParent() && request.auth.token.email in resource.data.parentEmails)
+        (isParent() && (
+          request.auth.token.email in resource.data.parentEmails ||
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedToddlerIds != null &&
+           resource.data.toddlerIds.hasAny(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedToddlerIds))
+        ))
       );
       allow create: if isNanny() && isValidLog();
       allow update: if isNanny() && resource.data.nannyId == request.auth.uid && isValidLog();

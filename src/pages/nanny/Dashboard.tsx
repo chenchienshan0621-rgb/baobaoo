@@ -47,6 +47,11 @@ export function NannyDashboard() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // 分享狀態
+  const [shareAction, setShareAction] = useState<'share' | 'line' | 'pdf' | null>(null);
+  const [selectedToddlerForShare, setSelectedToddlerForShare] = useState<string | null>(null);
+  const [activeShareToddlerId, setActiveShareToddlerId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!user) return;
 
@@ -143,23 +148,34 @@ export function NannyDashboard() {
 
   const [isSharing, setIsSharing] = useState(false);
 
-  const handleShare = async () => {
-    const selectedLogs = logs.filter(log => selectedLogIds.includes(log.id));
-    if (selectedLogs.length === 0) return;
+  const handleShare = async (toddlerId: string) => {
+    const selectedLogs = logs.filter(log => selectedLogIds.includes(log.id) && log.toddlerIds.includes(toddlerId));
+    if (selectedLogs.length === 0) {
+      setErrorMsg('選取的日誌中沒有該幼兒的紀錄。');
+      return;
+    }
 
     setIsSharing(true);
     try {
       // 稍微等待確保 React 已經將隱藏的 DOM 渲染完畢
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      let shareText = '寶貝的溫馨日誌：\n\n';
+      let shareText = `寶貝 ${toddlers[toddlerId] || ''} 的溫馨日誌：\n\n`;
       selectedLogs.forEach(log => {
         const dateStr = format(new Date(log.createdAt), 'yyyy/MM/dd HH:mm');
-        shareText += `【${dateStr}】\n${log.description}\n\n`;
+        shareText += `【${dateStr}】\n${log.description}\n`;
+        
+        if (log.dailyRecords?.[toddlerId]) {
+          const record = log.dailyRecords[toddlerId];
+          if (record.activityContent) shareText += `\n[活動內容]\n${record.activityContent}\n`;
+          if (record.meals) shareText += `\n[營養午餐]\n${record.meals}\n`;
+          if (record.snacks) shareText += `\n[點心]\n${record.snacks}\n`;
+          if (record.sleepRecord) shareText += `\n[睡眠記錄]\n${record.sleepRecord}\n`;
+          if (record.toileting) shareText += `\n[如廁]\n${record.toileting}\n`;
+        }
+        shareText += '\n';
       });
-      const appUrl = window.location.origin + window.location.pathname;
-      shareText += `\n查看更多：${appUrl}`;
-
+      
       const logElement = document.getElementById('combined-share-container');
       let file: File | null = null;
 
@@ -215,7 +231,6 @@ export function NannyDashboard() {
           } catch (e) {}
         } else {
           shareData.text = shareText;
-          shareData.url = appUrl;
         }
 
         await navigator.share(shareData);
@@ -238,69 +253,95 @@ export function NannyDashboard() {
     setTimeout(() => setSuccessMsg(null), 3000);
   };
 
-  const handleShareLine = async () => {
-    const selectedLogs = logs.filter(log => selectedLogIds.includes(log.id));
-    if (selectedLogs.length === 0) return;
+  const handleShareLine = async (toddlerId: string) => {
+    const selectedLogs = logs.filter(log => selectedLogIds.includes(log.id) && log.toddlerIds.includes(toddlerId));
+    if (selectedLogs.length === 0) {
+      setErrorMsg('選取的日誌中沒有該幼兒的紀錄。');
+      return;
+    }
 
     setIsSharing(true);
     try {
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      let shareText = '寶貝的溫馨日誌：\n\n';
+      let shareText = `寶貝 ${toddlers[toddlerId] || ''} 的溫馨日誌：\n\n`;
       selectedLogs.forEach(log => {
         const dateStr = format(new Date(log.createdAt), 'yyyy/MM/dd HH:mm');
-        shareText += `【${dateStr}】\n${log.description}\n\n`;
-      });
-      const appUrl = window.location.origin + window.location.pathname;
-      shareText += `\n查看更多：${appUrl}`;
-
-      const logElement = document.getElementById('combined-share-container');
-      if (logElement) {
-        try {
-          const images = logElement.getElementsByTagName('img');
-          await Promise.all(Array.from(images).map(img => {
-            if (img.complete) return Promise.resolve();
-            return new Promise(resolve => {
-              img.onload = resolve;
-              img.onerror = resolve;
-            });
-          }));
-
-          const canvas = await html2canvas(logElement, {
-            scale: 2,
-            useCORS: true,
-            allowTaint: true,
-            backgroundColor: '#ffffff',
-            windowWidth: 800,
-            onclone: (clonedDoc) => {
-              const el = clonedDoc.getElementById('combined-share-container');
-              if (el) {
-                el.style.position = 'relative';
-                el.style.left = '0';
-                el.style.top = '0';
-              }
-            }
-          });
-
-          const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-          if (blob) {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `baby-logs-${format(new Date(), 'yyyyMMdd-HHmm')}.jpg`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-          }
-        } catch (e) {
-          console.warn('Failed to generate combined image for Line sharing', e);
+        shareText += `【${dateStr}】\n${log.description}\n`;
+        
+        if (log.dailyRecords?.[toddlerId]) {
+          const record = log.dailyRecords[toddlerId];
+          if (record.activityContent) shareText += `\n[活動內容]\n${record.activityContent}\n`;
+          if (record.meals) shareText += `\n[營養午餐]\n${record.meals}\n`;
+          if (record.snacks) shareText += `\n[點心]\n${record.snacks}\n`;
+          if (record.sleepRecord) shareText += `\n[睡眠記錄]\n${record.sleepRecord}\n`;
+          if (record.toileting) shareText += `\n[如廁]\n${record.toileting}\n`;
         }
+        shareText += '\n';
+      });
+
+      try {
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        
+        for (let i = 0; i < selectedLogs.length; i++) {
+          const log = selectedLogs[i];
+          const logElement = document.getElementById(`pdf-log-${log.id}`);
+          
+          if (logElement) {
+            const images = logElement.getElementsByTagName('img');
+            await Promise.all(Array.from(images).map(img => {
+              if (img.complete) return Promise.resolve();
+              return new Promise(resolve => {
+                img.onload = resolve;
+                img.onerror = resolve;
+              });
+            }));
+
+            const canvas = await html2canvas(logElement, {
+              scale: 2,
+              useCORS: true,
+              allowTaint: true,
+              backgroundColor: '#ffffff',
+              windowWidth: 800,
+              onclone: (clonedDoc) => {
+                const el = clonedDoc.getElementById(`pdf-log-${log.id}`);
+                if (el) {
+                  el.style.position = 'relative';
+                  el.style.left = '0';
+                  el.style.top = '0';
+                }
+              }
+            });
+
+            const imgData = canvas.toDataURL('image/jpeg', 0.9);
+            
+            if (imgData !== 'data:,') {
+              const imgProps = pdf.getImageProperties(imgData);
+              const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+              if (i > 0) {
+                pdf.addPage();
+              }
+              
+              const finalHeight = Math.min(imgHeight, pdfHeight);
+              const finalWidth = (finalHeight * pdfWidth) / imgHeight;
+              const xOffset = (pdfWidth - finalWidth) / 2;
+              
+              pdf.addImage(imgData, 'JPEG', xOffset, 0, finalWidth, finalHeight);
+            }
+          }
+        }
+
+        pdf.save(`baby-logs-${format(new Date(), 'yyyyMMdd-HHmm')}.pdf`);
+      } catch (e) {
+        console.warn('Failed to generate PDF for Line sharing', e);
       }
 
       const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(shareText)}`;
       window.open(lineUrl, '_blank');
-      setSuccessMsg('已下載圖檔並開啟 Line！請在 Line 中手動附上圖片。');
+      setSuccessMsg('已下載 PDF 並開啟 Line！請在 Line 中手動附上檔案。');
     } catch (error) {
       console.error('Line Share failed:', error);
       setErrorMsg('分享失敗，請稍後再試。');
@@ -313,9 +354,12 @@ export function NannyDashboard() {
 
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
-  const handleDownloadPDF = async () => {
-    const selectedLogs = logs.filter(log => selectedLogIds.includes(log.id));
-    if (selectedLogs.length === 0) return;
+  const handleDownloadPDF = async (toddlerId: string) => {
+    const selectedLogs = logs.filter(log => selectedLogIds.includes(log.id) && log.toddlerIds.includes(toddlerId));
+    if (selectedLogs.length === 0) {
+      setErrorMsg('選取的日誌中沒有該幼兒的紀錄。');
+      return;
+    }
 
     setIsGeneratingPDF(true);
     setErrorMsg(null);
@@ -568,8 +612,8 @@ export function NannyDashboard() {
                 {log.dailyRecords && Object.keys(log.dailyRecords).length > 0 && (
                   <div className="mt-4 space-y-3 border-t border-stone-100 pt-4">
                     <h4 className="text-sm font-bold text-stone-700">寶貝生活紀錄</h4>
-                    {Object.entries(log.dailyRecords).map(([toddlerId, record]) => {
-                      const hasContent = Object.values(record).some(val => val.trim() !== '');
+                    {Object.entries(log.dailyRecords).map(([toddlerId, record]: [string, any]) => {
+                      const hasContent = Object.values(record).some((val: any) => val && val.trim() !== '');
                       if (!hasContent) return null;
                       
                       return (
@@ -605,7 +649,7 @@ export function NannyDashboard() {
               取消
             </button>
             <button
-              onClick={handleShare}
+              onClick={() => setShareAction('share')}
               disabled={isSharing}
               className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-full transition-colors text-sm font-medium flex items-center space-x-1 whitespace-nowrap disabled:opacity-50"
             >
@@ -613,7 +657,7 @@ export function NannyDashboard() {
               <span className="hidden sm:inline">分享</span>
             </button>
             <button
-              onClick={handleShareLine}
+              onClick={() => setShareAction('line')}
               disabled={isSharing}
               className="px-4 py-2 bg-[#06C755] hover:bg-[#05b34c] text-white rounded-full transition-colors text-sm font-medium flex items-center space-x-1 whitespace-nowrap disabled:opacity-50"
             >
@@ -621,7 +665,7 @@ export function NannyDashboard() {
               <span className="hidden sm:inline">Line</span>
             </button>
             <button
-              onClick={handleDownloadPDF}
+              onClick={() => setShareAction('pdf')}
               disabled={isGeneratingPDF}
               className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full transition-colors text-sm font-medium flex items-center space-x-1 whitespace-nowrap disabled:opacity-50"
             >
@@ -635,6 +679,64 @@ export function NannyDashboard() {
               <Trash2 className="w-4 h-4" />
               <span className="hidden sm:inline">刪除</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 分享選擇幼兒彈窗 */}
+      {shareAction && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95">
+            <h3 className="text-2xl font-bold text-stone-800 mb-6">請選擇要分享的幼兒</h3>
+            <div className="space-y-3 mb-8 max-h-[60vh] overflow-y-auto">
+              {Array.from(new Set(logs.filter(log => selectedLogIds.includes(log.id)).flatMap(log => log.toddlerIds))).map(toddlerId => (
+                <button
+                  key={toddlerId}
+                  onClick={() => setSelectedToddlerForShare(toddlerId)}
+                  className={`w-full text-left px-6 py-4 rounded-2xl border-2 transition-all ${
+                    selectedToddlerForShare === toddlerId 
+                      ? 'border-rose-500 bg-rose-50' 
+                      : 'border-stone-100 hover:border-rose-200 hover:bg-stone-50'
+                  }`}
+                >
+                  <span className="text-lg font-medium text-stone-800">{toddlers[toddlerId] || '未知幼兒'}</span>
+                </button>
+              ))}
+              {Array.from(new Set(logs.filter(log => selectedLogIds.includes(log.id)).flatMap(log => log.toddlerIds))).length === 0 && (
+                <p className="text-stone-500 text-center py-4">選取的日誌中沒有關聯的幼兒。</p>
+              )}
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShareAction(null);
+                  setSelectedToddlerForShare(null);
+                }}
+                className="px-6 py-3 text-stone-600 hover:bg-stone-100 rounded-xl transition-colors font-medium"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  if (!selectedToddlerForShare) return;
+                  const action = shareAction;
+                  const toddlerId = selectedToddlerForShare;
+                  setActiveShareToddlerId(toddlerId);
+                  setShareAction(null);
+                  setSelectedToddlerForShare(null);
+                  
+                  setTimeout(() => {
+                    if (action === 'share') handleShare(toddlerId);
+                    else if (action === 'line') handleShareLine(toddlerId);
+                    else if (action === 'pdf') handleDownloadPDF(toddlerId);
+                  }, 100);
+                }}
+                disabled={!selectedToddlerForShare}
+                className="px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl transition-colors font-medium disabled:opacity-50"
+              >
+                確定分享
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -673,7 +775,7 @@ export function NannyDashboard() {
 
       {/* Hidden container for PDF generation */}
       <div className="fixed left-[200vw] top-0 w-[800px] pointer-events-none">
-        {logs.filter(log => selectedLogIds.includes(log.id)).map(log => (
+        {logs.filter(log => selectedLogIds.includes(log.id) && (!activeShareToddlerId || log.toddlerIds.includes(activeShareToddlerId))).map(log => (
           <div 
             key={`pdf-${log.id}`} 
             id={`pdf-log-${log.id}`} 
@@ -681,7 +783,7 @@ export function NannyDashboard() {
             style={{ backgroundColor: '#ffffff' }}
           >
             <div className="text-3xl font-bold mb-6 pb-4 flex items-center justify-between" style={{ color: '#292524', borderBottom: '2px solid #ffe4e6' }}>
-              <span>寶貝溫馨日誌</span>
+              <span>寶貝溫馨日誌 {activeShareToddlerId && toddlers[activeShareToddlerId] ? `- ${toddlers[activeShareToddlerId]}` : ''}</span>
               <span className="text-xl font-normal" style={{ color: '#78716c' }}>{format(new Date(log.createdAt), 'yyyy/MM/dd HH:mm')}</span>
             </div>
             {log.photoBase64 && (
@@ -697,6 +799,40 @@ export function NannyDashboard() {
             <p className="text-2xl leading-relaxed whitespace-pre-wrap" style={{ color: '#292524' }}>
               {log.description}
             </p>
+            {activeShareToddlerId && log.dailyRecords?.[activeShareToddlerId] && (
+              <div className="mt-8 space-y-6">
+                {log.dailyRecords[activeShareToddlerId].activityContent && (
+                  <div>
+                    <h4 className="font-bold text-xl mb-2" style={{ color: '#292524' }}>活動內容</h4>
+                    <p className="text-2xl leading-relaxed whitespace-pre-wrap" style={{ color: '#57534e' }}>{log.dailyRecords[activeShareToddlerId].activityContent}</p>
+                  </div>
+                )}
+                {log.dailyRecords[activeShareToddlerId].meals && (
+                  <div>
+                    <h4 className="font-bold text-xl mb-2" style={{ color: '#292524' }}>營養午餐</h4>
+                    <p className="text-2xl leading-relaxed whitespace-pre-wrap" style={{ color: '#57534e' }}>{log.dailyRecords[activeShareToddlerId].meals}</p>
+                  </div>
+                )}
+                {log.dailyRecords[activeShareToddlerId].snacks && (
+                  <div>
+                    <h4 className="font-bold text-xl mb-2" style={{ color: '#292524' }}>點心</h4>
+                    <p className="text-2xl leading-relaxed whitespace-pre-wrap" style={{ color: '#57534e' }}>{log.dailyRecords[activeShareToddlerId].snacks}</p>
+                  </div>
+                )}
+                {log.dailyRecords[activeShareToddlerId].sleepRecord && (
+                  <div>
+                    <h4 className="font-bold text-xl mb-2" style={{ color: '#292524' }}>睡眠記錄</h4>
+                    <p className="text-2xl leading-relaxed whitespace-pre-wrap" style={{ color: '#57534e' }}>{log.dailyRecords[activeShareToddlerId].sleepRecord}</p>
+                  </div>
+                )}
+                {log.dailyRecords[activeShareToddlerId].toileting && (
+                  <div>
+                    <h4 className="font-bold text-xl mb-2" style={{ color: '#292524' }}>如廁</h4>
+                    <p className="text-2xl leading-relaxed whitespace-pre-wrap" style={{ color: '#57534e' }}>{log.dailyRecords[activeShareToddlerId].toileting}</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -704,9 +840,9 @@ export function NannyDashboard() {
       <div className="fixed left-[300vw] top-0 w-[800px] pointer-events-none">
         <div id="combined-share-container" className="p-10" style={{ backgroundColor: '#ffffff' }}>
           <div className="text-4xl font-bold mb-8 pb-4 text-center" style={{ color: '#292524', borderBottom: '2px solid #ffe4e6' }}>
-            寶貝溫馨日誌
+            寶貝溫馨日誌 {activeShareToddlerId && toddlers[activeShareToddlerId] ? `- ${toddlers[activeShareToddlerId]}` : ''}
           </div>
-          {logs.filter(log => selectedLogIds.includes(log.id)).map((log, index) => (
+          {logs.filter(log => selectedLogIds.includes(log.id) && (!activeShareToddlerId || log.toddlerIds.includes(activeShareToddlerId))).map((log, index) => (
             <div key={`combined-${log.id}`} className={index > 0 ? "mt-12 pt-12" : ""} style={index > 0 ? { borderTop: '2px dashed #e5e5e5' } : {}}>
               <div className="text-xl font-normal mb-6" style={{ color: '#78716c' }}>
                 {format(new Date(log.createdAt), 'yyyy/MM/dd HH:mm')}
@@ -724,6 +860,40 @@ export function NannyDashboard() {
               <p className="text-2xl leading-relaxed whitespace-pre-wrap" style={{ color: '#292524' }}>
                 {log.description}
               </p>
+              {activeShareToddlerId && log.dailyRecords?.[activeShareToddlerId] && (
+                <div className="mt-8 space-y-6">
+                  {log.dailyRecords[activeShareToddlerId].activityContent && (
+                    <div>
+                      <h4 className="font-bold text-xl mb-2" style={{ color: '#292524' }}>活動內容</h4>
+                      <p className="text-2xl leading-relaxed whitespace-pre-wrap" style={{ color: '#57534e' }}>{log.dailyRecords[activeShareToddlerId].activityContent}</p>
+                    </div>
+                  )}
+                  {log.dailyRecords[activeShareToddlerId].meals && (
+                    <div>
+                      <h4 className="font-bold text-xl mb-2" style={{ color: '#292524' }}>營養午餐</h4>
+                      <p className="text-2xl leading-relaxed whitespace-pre-wrap" style={{ color: '#57534e' }}>{log.dailyRecords[activeShareToddlerId].meals}</p>
+                    </div>
+                  )}
+                  {log.dailyRecords[activeShareToddlerId].snacks && (
+                    <div>
+                      <h4 className="font-bold text-xl mb-2" style={{ color: '#292524' }}>點心</h4>
+                      <p className="text-2xl leading-relaxed whitespace-pre-wrap" style={{ color: '#57534e' }}>{log.dailyRecords[activeShareToddlerId].snacks}</p>
+                    </div>
+                  )}
+                  {log.dailyRecords[activeShareToddlerId].sleepRecord && (
+                    <div>
+                      <h4 className="font-bold text-xl mb-2" style={{ color: '#292524' }}>睡眠記錄</h4>
+                      <p className="text-2xl leading-relaxed whitespace-pre-wrap" style={{ color: '#57534e' }}>{log.dailyRecords[activeShareToddlerId].sleepRecord}</p>
+                    </div>
+                  )}
+                  {log.dailyRecords[activeShareToddlerId].toileting && (
+                    <div>
+                      <h4 className="font-bold text-xl mb-2" style={{ color: '#292524' }}>如廁</h4>
+                      <p className="text-2xl leading-relaxed whitespace-pre-wrap" style={{ color: '#57534e' }}>{log.dailyRecords[activeShareToddlerId].toileting}</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
           <div className="mt-12 pt-6 text-center text-lg" style={{ color: '#a8a29e', borderTop: '2px solid #ffe4e6' }}>

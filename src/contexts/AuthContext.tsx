@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { handleFirestoreError, OperationType } from '../lib/utils';
 
@@ -11,6 +11,7 @@ export interface UserProfile {
   role: Role;
   name: string;
   email: string;
+  linkedToddlerIds?: string[];
 }
 
 interface AuthContextType {
@@ -39,6 +40,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (docSnap.exists()) {
             setProfile(docSnap.data() as UserProfile);
           } else {
+            // Check if user is pre-registered
+            if (currentUser.email) {
+              const preRegRef = doc(db, 'pre_registered_users', currentUser.email);
+              const preRegSnap = await getDoc(preRegRef);
+              if (preRegSnap.exists()) {
+                const preRegData = preRegSnap.data();
+                const newProfile: UserProfile = {
+                  uid: currentUser.uid,
+                  role: preRegData.role,
+                  name: preRegData.name || currentUser.displayName || 'Unknown',
+                  email: currentUser.email,
+                  linkedToddlerIds: preRegData.linkedToddlerIds || []
+                };
+                await setDoc(docRef, newProfile);
+                await deleteDoc(preRegRef);
+                setProfile(newProfile);
+                setLoading(false);
+                return;
+              }
+            }
             setProfile(null); // Needs role selection
           }
         } catch (error) {

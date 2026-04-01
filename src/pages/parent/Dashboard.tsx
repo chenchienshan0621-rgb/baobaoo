@@ -46,46 +46,99 @@ export function ParentDashboard() {
   useEffect(() => {
     if (!user || !user.email) return;
 
-    // Fetch toddlers for the filter dropdown
-    const fetchToddlers = async () => {
+    let unsubscribe1: () => void;
+    let unsubscribe2: () => void;
+
+    const fetchData = async () => {
       try {
+        // Fetch user profile to get linkedToddlerIds
+        const { getDoc, doc, documentId } = await import('firebase/firestore');
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        const linkedToddlerIds = userDoc.data()?.linkedToddlerIds || [];
+
+        // Fetch toddlers for the filter dropdown
         const q1 = query(collection(db, 'toddlers'), where('parentEmail', '==', user.email));
         const q2 = query(collection(db, 'toddlers'), where('parentEmails', 'array-contains', user.email));
         
-        const [snapshot1, snapshot2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+        const promises = [getDocs(q1), getDocs(q2)];
+        
+        // If there are linked toddlers, fetch them too
+        if (linkedToddlerIds.length > 0) {
+          // Split into chunks of 10 for 'in' query
+          for (let i = 0; i < linkedToddlerIds.length; i += 10) {
+            const chunk = linkedToddlerIds.slice(i, i + 10);
+            const q3 = query(collection(db, 'toddlers'), where(documentId(), 'in', chunk));
+            promises.push(getDocs(q3));
+          }
+        }
+        
+        const snapshots = await Promise.all(promises);
         
         const toddlersMap = new Map();
-        snapshot1.docs.forEach(doc => toddlersMap.set(doc.id, { id: doc.id, name: doc.data().name }));
-        snapshot2.docs.forEach(doc => toddlersMap.set(doc.id, { id: doc.id, name: doc.data().name }));
+        snapshots.forEach(snapshot => {
+          snapshot.docs.forEach(doc => toddlersMap.set(doc.id, { id: doc.id, name: doc.data().name }));
+        });
         
         setToddlers(Array.from(toddlersMap.values()) as Toddler[]);
+
+        // Setup log listeners
+        const logsMap = new Map<string, Log>();
+        
+        const updateLogs = () => {
+          const sortedLogs = Array.from(logsMap.values()).sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+          setLogs(sortedLogs);
+          setLoading(false);
+        };
+
+        const logsQ1 = query(
+          collection(db, 'logs'),
+          where('parentEmails', 'array-contains', user.email)
+        );
+
+        unsubscribe1 = onSnapshot(logsQ1, (snapshot) => {
+          snapshot.docs.forEach(doc => {
+            logsMap.set(doc.id, { id: doc.id, ...doc.data() } as Log);
+          });
+          updateLogs();
+        }, (error) => {
+          handleFirestoreError(error, OperationType.LIST, 'logs');
+          setLoading(false);
+        });
+
+        if (linkedToddlerIds.length > 0) {
+          // Only take first 10 for array-contains-any limit
+          const limitedIds = linkedToddlerIds.slice(0, 10);
+          const logsQ2 = query(
+            collection(db, 'logs'),
+            where('toddlerIds', 'array-contains-any', limitedIds)
+          );
+
+          unsubscribe2 = onSnapshot(logsQ2, (snapshot) => {
+            snapshot.docs.forEach(doc => {
+              logsMap.set(doc.id, { id: doc.id, ...doc.data() } as Log);
+            });
+            updateLogs();
+          }, (error) => {
+            handleFirestoreError(error, OperationType.LIST, 'logs');
+          });
+        } else {
+          setLoading(false);
+        }
+
       } catch (error) {
         handleFirestoreError(error, OperationType.LIST, 'toddlers');
+        setLoading(false);
       }
     };
-    fetchToddlers();
 
-    // 核心過濾邏輯：只查詢 parentEmails 陣列中包含當前登入家長 Email 的日誌
-    // 這部分同時受到 Firestore Security Rules 的保護，確保資料安全
-    const q = query(
-      collection(db, 'logs'),
-      where('parentEmails', 'array-contains', user.email),
-      orderBy('createdAt', 'desc')
-    );
+    fetchData();
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const logsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Log[];
-      setLogs(logsData);
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'logs');
-      setLoading(false);
-    });
-
-    return unsubscribe;
+    return () => {
+      if (unsubscribe1) unsubscribe1();
+      if (unsubscribe2) unsubscribe2();
+    };
   }, [user]);
 
   const handleDownload = (base64: string, date: string) => {
@@ -240,8 +293,8 @@ export function ParentDashboard() {
                   {log.dailyRecords && Object.keys(log.dailyRecords).length > 0 && (
                     <div className="mb-6 space-y-3 border-t border-stone-100 pt-4">
                       <h4 className="text-sm font-bold text-stone-700">寶貝生活紀錄</h4>
-                      {Object.entries(log.dailyRecords).map(([toddlerId, record]) => {
-                        const hasContent = Object.values(record).some(val => val.trim() !== '');
+                      {Object.entries(log.dailyRecords).map(([toddlerId, record]: [string, any]) => {
+                        const hasContent = Object.values(record).some((val: any) => val && val.trim() !== '');
                         if (!hasContent) return null;
                         
                         const toddlerName = toddlers.find(t => t.id === toddlerId)?.name || '寶貝';

@@ -3,7 +3,7 @@ import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { handleFirestoreError, OperationType } from '../../lib/utils';
-import { Upload as UploadIcon, X, Loader2, Sparkles, Check, ImagePlus, Info, Download, MapPin, Clock, Plus, Trash2 } from 'lucide-react';
+import { Upload as UploadIcon, X, Loader2, Sparkles, Check, ImagePlus, Info, Download, MapPin, Clock, Plus, Trash2, Copy, ClipboardPaste } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { useNavigate, Link } from 'react-router-dom';
 import exifr from 'exifr';
@@ -168,7 +168,7 @@ export function NannyUpload() {
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(e.target.files || []);
+    const selectedFiles = Array.from(e.target.files || []) as File[];
     if (selectedFiles.length > 0) {
       await processFiles(selectedFiles);
     }
@@ -188,7 +188,7 @@ export function NannyUpload() {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const droppedFiles = Array.from(e.dataTransfer.files || []);
+    const droppedFiles = Array.from(e.dataTransfer.files || []) as File[];
     const imageFiles = droppedFiles.filter(f => f.type.startsWith('image/'));
     if (imageFiles.length > 0) {
       await processFiles(imageFiles);
@@ -346,6 +346,46 @@ export function NannyUpload() {
 
   const removeItem = (id: string) => {
     setItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [internalCopiedRecord, setInternalCopiedRecord] = useState<DailyRecord | null>(null);
+
+  const copyToClipboard = (toddlerName: string, record: DailyRecord, description: string, itemId: string, toddlerId: string) => {
+    const textToCopy = `【${toddlerName} 的寶貝日誌】
+日誌描述：${description || '無'}
+
+活動內容：${record.activityContent || '無'}
+營養午餐：${record.meals || '無'}
+點心：${record.snacks || '無'}
+睡眠記錄：${record.sleepRecord || '無'}
+如廁：${record.toileting || '無'}`;
+
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      const copyKey = `${itemId}-${toddlerId}`;
+      setCopiedId(copyKey);
+      setInternalCopiedRecord(record);
+      setTimeout(() => setCopiedId(null), 2000);
+    }).catch(err => {
+      console.error('Failed to copy text: ', err);
+      setErrorMsg('複製失敗，請手動複製。');
+    });
+  };
+
+  const pasteRecord = (itemId: string, toddlerId: string) => {
+    if (!internalCopiedRecord) return;
+    setItems(prev => prev.map(item => {
+      if (item.id === itemId) {
+        return {
+          ...item,
+          dailyRecords: {
+            ...item.dailyRecords,
+            [toddlerId]: { ...internalCopiedRecord }
+          }
+        };
+      }
+      return item;
+    }));
   };
 
   const handleSaveAll = async () => {
@@ -572,55 +612,86 @@ export function NannyUpload() {
                             
                             return (
                               <div key={toddlerId} className="bg-stone-50 p-4 rounded-xl border border-stone-200 space-y-3">
-                                <div className="font-medium text-rose-600 border-b border-rose-100 pb-2 mb-3">{toddler.name} 的紀錄</div>
+                                <div className="flex items-center justify-between border-b border-rose-100 pb-2 mb-3">
+                                  <div className="font-medium text-rose-600">{toddler.name} 的紀錄</div>
+                                  <div className="flex items-center space-x-2">
+                                    {internalCopiedRecord && (
+                                      <button
+                                        onClick={() => pasteRecord(item.id, toddlerId)}
+                                        className="flex items-center space-x-1 text-xs px-2 py-1 bg-white border border-stone-200 rounded-md hover:bg-stone-50 text-stone-600 transition-colors"
+                                        title="貼上已複製的紀錄"
+                                      >
+                                        <ClipboardPaste className="w-3 h-3" />
+                                        <span>貼上紀錄</span>
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => copyToClipboard(toddler.name, record, item.description, item.id, toddlerId)}
+                                      className="flex items-center space-x-1 text-xs px-2 py-1 bg-white border border-stone-200 rounded-md hover:bg-stone-50 text-stone-600 transition-colors"
+                                      title="複製日誌文字"
+                                    >
+                                      {copiedId === `${item.id}-${toddlerId}` ? (
+                                        <>
+                                          <Check className="w-3 h-3 text-green-500" />
+                                          <span className="text-green-600">已複製</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy className="w-3 h-3" />
+                                          <span>複製轉貼</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  <div>
+                                  <div className="sm:col-span-2">
                                     <label className="text-xs font-bold text-stone-600 mb-1 block">活動內容</label>
-                                    <input 
-                                      type="text" 
+                                    <textarea 
+                                      rows={2}
                                       value={record.activityContent}
                                       onChange={(e) => updateDailyRecord(item.id, toddlerId, 'activityContent', e.target.value)}
-                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none"
+                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none resize-none"
                                       placeholder="例如：畫畫、聽故事"
                                     />
                                   </div>
                                   <div>
-                                    <label className="text-xs font-bold text-stone-600 mb-1 block">用餐</label>
-                                    <input 
-                                      type="text" 
+                                    <label className="text-xs font-bold text-stone-600 mb-1 block">營養午餐</label>
+                                    <textarea 
+                                      rows={2}
                                       value={record.meals}
                                       onChange={(e) => updateDailyRecord(item.id, toddlerId, 'meals', e.target.value)}
-                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none"
+                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none resize-none"
                                       placeholder="例如：吃了一碗飯、蔬菜"
                                     />
                                   </div>
                                   <div>
                                     <label className="text-xs font-bold text-stone-600 mb-1 block">點心</label>
-                                    <input 
-                                      type="text" 
+                                    <textarea 
+                                      rows={2}
                                       value={record.snacks}
                                       onChange={(e) => updateDailyRecord(item.id, toddlerId, 'snacks', e.target.value)}
-                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none"
+                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none resize-none"
                                       placeholder="例如：蘋果半顆、牛奶"
                                     />
                                   </div>
                                   <div>
                                     <label className="text-xs font-bold text-stone-600 mb-1 block">睡眠記錄</label>
-                                    <input 
-                                      type="text" 
+                                    <textarea 
+                                      rows={2}
                                       value={record.sleepRecord}
                                       onChange={(e) => updateDailyRecord(item.id, toddlerId, 'sleepRecord', e.target.value)}
-                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none"
+                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none resize-none"
                                       placeholder="例如：午睡 13:00 - 15:00"
                                     />
                                   </div>
-                                  <div className="sm:col-span-2">
+                                  <div>
                                     <label className="text-xs font-bold text-stone-600 mb-1 block">如廁</label>
-                                    <input 
-                                      type="text" 
+                                    <textarea 
+                                      rows={2}
                                       value={record.toileting}
                                       onChange={(e) => updateDailyRecord(item.id, toddlerId, 'toileting', e.target.value)}
-                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none"
+                                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-100 focus:border-rose-300 outline-none resize-none"
                                       placeholder="例如：大便1次(正常)、小便3次"
                                     />
                                   </div>
